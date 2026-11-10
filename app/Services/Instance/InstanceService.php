@@ -7,6 +7,7 @@ use App\Models\Instance;
 use App\Services\Cache\InstanceCacheService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Visus\Cuid2\Cuid2;
 
 /**
@@ -28,7 +29,7 @@ class InstanceService
 
         // Multi-tenant quota check: if user_id is provided, enforce plan instance limits
         $userId = $data['user_id'] ?? null;
-        if ($userId) {
+        if ($userId && Schema::hasColumn('Instance', 'user_id')) {
             $user = \App\Models\User::find($userId);
             if ($user && !$user->isSuperAdmin()) {
                 if ($user->isSuspended()) {
@@ -55,15 +56,22 @@ class InstanceService
         $token = $data['token'] ?? (new Cuid2())->toString();
 
         $instance = DB::transaction(function () use ($instanceName, $token, $data, $userId) {
-            $inst = Instance::create([
+            $insertData = [
                 'name'             => $instanceName,
                 'connectionStatus' => InstanceConnectionStatus::Close,
                 'token'            => $token,
                 'integration'      => $data['integration'] ?? 'WHATSAPP-BAILEYS',
                 'number'           => $data['number'] ?? null,
-                'user_id'          => $userId,
-                'tenant_id'        => $data['tenant_id'] ?? ($userId ? "tenant_{$userId}" : null),
-            ]);
+            ];
+
+            if ($userId && Schema::hasColumn('Instance', 'user_id')) {
+                $insertData['user_id'] = $userId;
+            }
+            if (Schema::hasColumn('Instance', 'tenant_id')) {
+                $insertData['tenant_id'] = $data['tenant_id'] ?? ($userId ? "tenant_{$userId}" : null);
+            }
+
+            $inst = Instance::create($insertData);
 
             // Create default Setting
             \App\Models\Setting::create([
@@ -112,9 +120,9 @@ class InstanceService
             $query->where('name', $instanceName);
         }
 
-        if ($userId) {
+        if ($userId && Schema::hasColumn('Instance', 'user_id')) {
             $query->where('user_id', $userId);
-        } elseif ($tenantId) {
+        } elseif ($tenantId && Schema::hasColumn('Instance', 'tenant_id')) {
             $query->where('tenant_id', $tenantId);
         }
 
