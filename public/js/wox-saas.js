@@ -333,8 +333,6 @@ function switchView(viewId, updateHistory = true) {
     targetView.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
 
   // Update contextual search placeholder
   const searchInput = document.getElementById('global-search-input');
