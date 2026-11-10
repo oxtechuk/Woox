@@ -3016,6 +3016,7 @@ body {
 
   .sidebar-drawer-backdrop {
     display: none;
+    pointer-events: none;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
@@ -3025,7 +3026,8 @@ body {
   }
 
   .sidebar-drawer-backdrop.active {
-    display: block;
+    display: block !important;
+    pointer-events: auto !important;
   }
 
   /* Bottom Navigation Bar */
