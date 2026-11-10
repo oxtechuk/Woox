@@ -1393,6 +1393,45 @@ async function handleCreateInstanceSubmit(event) {
   await showQrModalFor(cleanId, name, desc);
 }
 
+var qrCountdownInterval = null;
+var QR_EXPIRY_SECONDS = 20;
+
+function startQrTimer() {
+  stopQrTimer();
+  var remaining = QR_EXPIRY_SECONDS;
+  var timerContainer = document.getElementById('qr-timer-container');
+  var timerCountdown = document.getElementById('qr-timer-countdown');
+  var timerProgress = document.getElementById('qr-timer-progress');
+  var centerLogo = document.getElementById('qr-center-logo');
+
+  if (timerContainer) timerContainer.style.display = 'block';
+  if (centerLogo) centerLogo.style.display = 'flex';
+  if (timerCountdown) timerCountdown.textContent = remaining + ' ثانية';
+  if (timerProgress) timerProgress.style.width = '100%';
+
+  qrCountdownInterval = setInterval(function () {
+    remaining--;
+    if (timerCountdown) timerCountdown.textContent = remaining + ' ثانية';
+    if (timerProgress) {
+      var pct = Math.max(0, (remaining / QR_EXPIRY_SECONDS) * 100);
+      timerProgress.style.width = pct + '%';
+    }
+
+    if (remaining <= 0) {
+      stopQrTimer();
+      if (timerCountdown) timerCountdown.textContent = 'جاري التحديث...';
+      refreshCurrentQr();
+    }
+  }, 1000);
+}
+
+function stopQrTimer() {
+  if (qrCountdownInterval) {
+    clearInterval(qrCountdownInterval);
+    qrCountdownInterval = null;
+  }
+}
+
 async function showQrModalFor(id, displayName, desc = 'فرع تجاري جديد') {
   currentQrInstanceId = id;
   const existingInst = woxState.instances.find(i => i.id === id);
@@ -1401,6 +1440,12 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
   const modal = document.getElementById('qr-scan-modal');
   const qrImg = document.getElementById('qr-code-img');
   const qrStatus = document.getElementById('qr-status-text');
+  const timerContainer = document.getElementById('qr-timer-container');
+  const centerLogo = document.getElementById('qr-center-logo');
+
+  stopQrTimer();
+  if (timerContainer) timerContainer.style.display = 'none';
+  if (centerLogo) centerLogo.style.display = 'none';
 
   modal.classList.add('active');
   qrStatus.textContent = 'جاري الاتصال بخادم واتساب وتوليد رمز QR حقيقي...';
@@ -1437,7 +1482,9 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
           if (base64) {
             qrImg.src = base64;
             qrImg.style.display = 'block';
+            if (centerLogo) centerLogo.style.display = 'flex';
             qrStatus.innerHTML = `امسح الرمز ضوئياً من تطبيق واتساب (الأجهزة المرتبطة) لربط [<strong>${actualName}</strong>]`;
+            startQrTimer();
             loaded = true;
             break;
           }
@@ -1447,6 +1494,7 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
     }
 
     if (!loaded) {
+      stopQrTimer();
       qrStatus.textContent = 'جاري إعداد جلسة الاتصال، اضغط على زر "تحديث الرمز" إذا استغرق وقتاً أطول.';
     }
 
@@ -1485,6 +1533,7 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
         const isConnected = stateData.instance?.state === 'open';
 
         if (isConnected) {
+          stopQrTimer();
           clearInterval(qrPollInterval);
           qrPollInterval = null;
 
@@ -1504,6 +1553,7 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
     }, 2500);
 
   } catch (err) {
+    stopQrTimer();
     console.error('QR Setup Error:', err);
     qrStatus.textContent = 'حدث خطأ في الاتصال بالخادم.';
   }
@@ -1514,10 +1564,15 @@ function refreshCurrentQr() {
 }
 
 function closeQrModal() {
+  stopQrTimer();
   if (qrPollInterval) {
     clearInterval(qrPollInterval);
     qrPollInterval = null;
   }
+  var timerContainer = document.getElementById('qr-timer-container');
+  var centerLogo = document.getElementById('qr-center-logo');
+  if (timerContainer) timerContainer.style.display = 'none';
+  if (centerLogo) centerLogo.style.display = 'none';
   closeModal('qr-scan-modal');
 }
 

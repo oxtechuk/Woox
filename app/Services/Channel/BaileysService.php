@@ -32,7 +32,8 @@ class BaileysService
 
         if ($bridgeAvailable !== false) {
             try {
-                $response = Http::connectTimeout(1)->timeout(2)
+                $timeout = (int) config('evolution.bridge.timeout', 15);
+                $response = Http::connectTimeout(4)->timeout($timeout)
                     ->withHeaders(['apikey' => $instance->token ?: config('evolution.authentication.api_key')])
                     ->get("{$this->bridgeUrl}/instance/connect/{$instance->name}");
 
@@ -49,7 +50,7 @@ class BaileysService
                     ];
                 }
             } catch (\Throwable $e) {
-                Cache::put('baileys_bridge_available', false, 30);
+                Cache::put('baileys_bridge_available', false, 15);
                 Log::debug("Baileys bridge offline, using local fallback: " . $e->getMessage());
             }
         }
@@ -80,7 +81,7 @@ class BaileysService
 
         if ($bridgeAvailable !== false) {
             try {
-                $response = Http::connectTimeout(1)->timeout(2)
+                $response = Http::connectTimeout(2)->timeout(5)
                     ->withHeaders(['apikey' => $instance->token ?: config('evolution.authentication.api_key')])
                     ->get("{$this->bridgeUrl}/instance/connectionState/{$instance->name}");
 
