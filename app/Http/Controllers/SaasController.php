@@ -186,9 +186,22 @@ class SaasController extends Controller
 
     // ─── Plans ────────────────────────────────────────────────────
 
-    public function getPlans(): JsonResponse
+    private function getPlansFilePath(): string
     {
-        $plans = [
+        return storage_path('app/saas_plans.json');
+    }
+
+    private function getStoredPlans(): array
+    {
+        $path = $this->getPlansFilePath();
+        if (File::exists($path)) {
+            $decoded = json_decode(File::get($path), true);
+            if (is_array($decoded) && count($decoded) > 0) {
+                return $decoded;
+            }
+        }
+
+        $defaultPlans = [
             [
                 'id'            => 'starter',
                 'name'          => 'Starter',
@@ -200,7 +213,7 @@ class SaasController extends Controller
                 'instanceLimit' => 1,
                 'messageLimit'  => 5000,
                 'aiBotsLimit'   => 1,
-                'hasWebhooks'   => true,
+                'hasWebhooks'   => false,
             ],
             [
                 'id'            => 'pro',
@@ -230,7 +243,14 @@ class SaasController extends Controller
             ],
         ];
 
-        return response()->json(['status' => 'success', 'data' => $plans]);
+        File::ensureDirectoryExists(dirname($path));
+        File::put($path, json_encode($defaultPlans, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        return $defaultPlans;
+    }
+
+    public function getPlans(): JsonResponse
+    {
+        return response()->json(['status' => 'success', 'data' => $this->getStoredPlans()]);
     }
 
     // ─── Authentication ───────────────────────────────────────────
@@ -298,8 +318,20 @@ class SaasController extends Controller
             }
         }
 
+        if ($user->isSuspended()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'تم إيقاف هذا الحساب من قِبل إدارة المنصة' . ($user->suspended_reason ? ': ' . $user->suspended_reason : '. يرجى التواصل مع الدعم الفني.'),
+            ], 403);
+        }
+
         $token = Str::random(64);
-        $role = str_contains($user->email, 'admin') ? 'ADMIN' : 'CLIENT';
+        $role = ($user->isSuperAdmin() || str_contains($user->email, 'admin')) ? 'SUPER_ADMIN' : 'CLIENT';
+
+        session(['user' => $user]);
+        if ($role === 'SUPER_ADMIN') {
+            session(['admin_user' => $user]);
+        }
 
         return response()->json([
             'status'  => 'success',
@@ -544,23 +576,192 @@ class SaasController extends Controller
 
     public function adminTenants(): JsonResponse
     {
-        $instances = DB::table('Instance')->get();
+        $users = User::with('instances')->get();
         $tenants = [];
-        foreach ($instances as $inst) {
+
+        foreach ($users as $user) {
+            $isFrozen = $user->isSuspended();
+            $instancesCount = $user->instances ? $user->instances->count() : 0;
+            $planName = $user->plan ? ucfirst($user->plan) : 'Starter';
+            $planNameAr = match (strtolower($user->plan ?? 'starter')) {
+                'enterprise' => 'باقة الشركات',
+                'pro'        => 'الباقة المتقدمة',
+                default      => 'الباقة الأساسية',
+            };
+
             $tenants[] = [
-                'id'           => $inst->id,
-                'name'         => $inst->name,
+                'id'           => (string) $user->id,
+                'name'         => $user->name,
                 'country'      => 'SA',
                 'currency'     => 'SAR',
-                'createdAt'    => $inst->createdAt,
-                'users'        => [['id' => '1', 'name' => 'Owner', 'email' => 'owner@example.com', 'role' => 'CLIENT']],
-                'subscription' => ['status' => 'ACTIVE', 'plan' => ['name' => 'Pro', 'nameAr' => 'الباقة المتقدمة']],
-                'virtualNumbers' => [],
-                'invoices'     => [],
+                'createdAt'    => $user->created_at ? $user->created_at->toIso8601String() : now()->toIso8601String(),
+                'users'        => [
+                    [
+                        'id'    => (string) $user->id,
+                        'name'  => $user->name,
+                        'email' => $user->email,
+                        'role'  => $user->role ?: 'CLIENT',
+                    ],
+                ],
+                'subscription' => [
+                    'status' => $isFrozen ? 'CANCELLED' : ($user->status === 'active' ? 'ACTIVE' : 'TRIAL'),
+                    'plan'   => [
+                        'id'     => $user->plan ?: 'starter',
+                        'name'   => $planName,
+                        'nameAr' => $planNameAr,
+                    ],
+                ],
+                'virtualNumbers' => $user->instances ? $user->instances->map(fn($inst) => ['id' => $inst->id, 'number' => $inst->name])->values()->all() : [],
+                'instancesCount' => $instancesCount,
+                'maxInstances'   => $user->max_instances ?? 1,
+                'invoices'       => [],
             ];
         }
 
         return response()->json(['status' => 'success', 'data' => $tenants]);
+    }
+
+    public function adminUpdateTenantStatus(Request $request, string $id): JsonResponse
+    {
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'المشترك غير موجود'], 404);
+        }
+
+        $newStatus = $request->input('status'); // 'ACTIVE' or 'CANCELLED' or 'suspended'
+        $user->status = in_array(strtoupper($newStatus), ['ACTIVE', 'ACTIVATE']) ? 'active' : 'suspended';
+        if ($user->status === 'suspended') {
+            $user->suspended_reason = $request->input('reason', 'تم تجميد الحساب بواسطة إدارة المنصة');
+        } else {
+            $user->suspended_reason = null;
+        }
+        $user->save();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'تم تحديث حالة المشترك بنجاح',
+            'data'    => ['id' => $user->id, 'status' => $user->status],
+        ]);
+    }
+
+    public function adminUpgradeTenant(Request $request, string $id): JsonResponse
+    {
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'المشترك غير موجود'], 404);
+        }
+
+        $planId = strtolower($request->input('planId', 'pro'));
+        $user->plan = $planId;
+
+        // Set max instances default based on upgraded plan
+        $planLimits = ['starter' => 1, 'pro' => 3, 'enterprise' => 10];
+        $user->max_instances = $planLimits[$planId] ?? 3;
+        $user->save();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'تمت ترقية باقة المشترك بنجاح',
+            'data'    => ['id' => $user->id, 'plan' => $user->plan, 'maxInstances' => $user->max_instances],
+        ]);
+    }
+
+    public function adminDeleteTenant(string $id): JsonResponse
+    {
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'المشترك غير موجود'], 404);
+        }
+
+        // Delete associated instances
+        DB::table('Instance')->where('user_id', $user->id)->delete();
+        $user->delete();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'تم حذف حساب المشترك وجميع بياناته بنجاح',
+        ]);
+    }
+
+    public function adminBroadcast(Request $request): JsonResponse
+    {
+        $title = $request->input('title', 'تنبيه من إدارة المنصة');
+        $message = $request->input('message');
+        if (!$message) {
+            return response()->json(['status' => 'error', 'message' => 'نص التنبيه مطلوب'], 422);
+        }
+
+        $broadcastData = [
+            'id'        => 'bc_' . time(),
+            'title'     => $title,
+            'message'   => $message,
+            'type'      => $request->input('type', 'info'),
+            'createdAt' => now()->toIso8601String(),
+        ];
+
+        File::put(storage_path('app/platform_broadcast.json'), json_encode($broadcastData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'تم إرسال التنبيه العام لجميع المشتركين بنجاح',
+            'data'    => $broadcastData,
+        ]);
+    }
+
+    public function adminUpdatePlan(Request $request): JsonResponse
+    {
+        $planId = $request->input('id');
+        $plans = $this->getStoredPlans();
+        $updated = false;
+
+        foreach ($plans as &$p) {
+            if ($p['id'] === $planId) {
+                if ($request->has('nameAr')) $p['nameAr'] = $request->input('nameAr');
+                if ($request->has('priceSAR')) $p['priceSAR'] = (int) $request->input('priceSAR');
+                if ($request->has('priceEGP')) $p['priceEGP'] = (int) $request->input('priceEGP');
+                if ($request->has('instanceLimit')) $p['instanceLimit'] = (int) $request->input('instanceLimit');
+                if ($request->has('messageLimit')) $p['messageLimit'] = (int) $request->input('messageLimit');
+                if ($request->has('aiBotsLimit')) $p['aiBotsLimit'] = (int) $request->input('aiBotsLimit');
+                $updated = true;
+                break;
+            }
+        }
+
+        if ($updated) {
+            File::put($this->getPlansFilePath(), json_encode($plans, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            return response()->json(['status' => 'success', 'message' => 'تم حفظ تعديلات الباقة بنجاح', 'data' => $plans]);
+        }
+
+        return response()->json(['status' => 'error', 'message' => 'الباقة غير موجودة'], 404);
+    }
+
+    public function adminCreatePlan(Request $request): JsonResponse
+    {
+        $name = trim($request->input('name', ''));
+        $nameAr = trim($request->input('nameAr', ''));
+        if (!$name || !$nameAr) {
+            return response()->json(['status' => 'error', 'message' => 'اسم الباقة مطلوب بالعربية والإنجليزية'], 422);
+        }
+
+        $plans = $this->getStoredPlans();
+        $planId = Str::slug($name);
+
+        $newPlan = [
+            'id'            => $planId,
+            'name'          => $name,
+            'nameAr'        => $nameAr,
+            'priceSAR'      => (int) $request->input('priceSAR', 499),
+            'priceEGP'      => (int) $request->input('priceEGP', 6000),
+            'instanceLimit' => (int) $request->input('instanceLimit', 5),
+            'messageLimit'  => (int) $request->input('messageLimit', 50000),
+            'aiBotsLimit'   => (int) $request->input('aiBotsLimit', 3),
+            'hasWebhooks'   => true,
+        ];
+
+        $plans[] = $newPlan;
+        File::put($this->getPlansFilePath(), json_encode($plans, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        return response()->json(['status' => 'success', 'message' => 'تم إنشاء الباقة بنجاح', 'data' => $newPlan]);
     }
 
     public function adminNumbers(): JsonResponse

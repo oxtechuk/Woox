@@ -31,7 +31,17 @@ class InstanceController extends Controller
      */
     public function create(CreateInstanceRequest $request): JsonResponse
     {
-        $result = $this->instanceService->create($request->validated());
+        $data     = $request->validated();
+        $user     = $request->user();
+        $userId   = $user?->id ?? $request->header('X-User-Id') ?? $request->input('user_id');
+        $tenantId = $request->header('X-Tenant-Id') ?? $request->input('tenant_id') ?? ($userId ? "tenant_{$userId}" : null);
+
+        if ($userId) {
+            $data['user_id']   = (int) $userId;
+            $data['tenant_id'] = $tenantId;
+        }
+
+        $result = $this->instanceService->create($data);
 
         return response()->json([
             'instance' => $result['instance'],
@@ -47,8 +57,9 @@ class InstanceController extends Controller
     {
         /** @var Instance $instance */
         $instance = $request->get('wox_instance');
+        $number   = $request->query('number') ?? $request->input('number');
 
-        $result = $this->evolutionService->connect($instance);
+        $result = $this->evolutionService->connect($instance, $number);
 
         return response()->json($result);
     }
@@ -77,7 +88,17 @@ class InstanceController extends Controller
     public function fetchInstances(Request $request): JsonResponse
     {
         $instanceName = $request->query('instanceName');
-        $instances    = $this->instanceService->findAll($instanceName);
+        $user         = $request->user();
+        $isSuperAdmin = ($user && $user->isSuperAdmin()) || $request->header('X-Super-Admin') === 'true';
+
+        $userId   = $isSuperAdmin ? null : ($user?->id ?? $request->header('X-User-Id') ?? $request->query('user_id'));
+        $tenantId = $isSuperAdmin ? null : ($request->header('X-Tenant-Id') ?? $request->query('tenant_id'));
+
+        $instances = $this->instanceService->findAll(
+            instanceName: $instanceName,
+            userId: $userId ? (int) $userId : null,
+            tenantId: $tenantId
+        );
 
         return response()->json($instances);
     }
@@ -87,6 +108,16 @@ class InstanceController extends Controller
      */
     public function delete(Request $request, string $instanceName): JsonResponse
     {
+        /** @var Instance|null $instance */
+        $instance = $request->get('wox_instance');
+        $user     = $request->user();
+
+        if ($instance && $instance->user_id && $user && !$user->isSuperAdmin()) {
+            if ($instance->user_id !== $user->id) {
+                abort(403, 'غير مصرح لك بحذف هذا الرقم');
+            }
+        }
+
         $deleted = $this->instanceService->delete($instanceName);
 
         return response()->json([

@@ -8,8 +8,8 @@
   <meta name="description"
     content="منصة Wox WhatsApp من Ox Tech - لوحة تحكم العميل المتكاملة لإدارة اتصالات وأتمتة الواتساب.">
   <link rel="icon" type="image/png" href="/images/wox-logo.png">
-  <link rel="stylesheet" href="/css/wox-design-system.css">
-  <link rel="stylesheet" href="/css/wox-saas.css?v=2.6">
+  <link rel="stylesheet" href="/css/wox-design-system.css?v=1.1">
+  <link rel="stylesheet" href="/css/wox-saas.css?v=2.7">
   <script>
     (function () {
       try {
@@ -218,6 +218,15 @@
            Persistent Header Bar
            ===================================================================== -->
       <header class="canvas-header">
+        <!-- Mobile Sidebar Drawer Toggle Button (Hamburger) -->
+        <button type="button" class="mobile-menu-toggle" onclick="toggleMobileSidebar()" aria-label="القائمة الرئيسية">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+
         <!-- Search Bar with KBD badge on the LEFT -->
         <div class="header-search-container">
           <span class="search-kbd-badge">⌘ K</span>
@@ -798,6 +807,10 @@
 
               <!-- Right: Customer Info with Edit Name -->
               <div style="display: flex; align-items: center; gap: 12px; direction: rtl;">
+                <button type="button" class="mobile-chat-back-btn" onclick="closeMobileChat()" title="الرجوع لقائمة المحادثات">
+                  <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                  <span>رجوع</span>
+                </button>
                 <div class="instance-wa-avatar" style="width: 38px; height: 38px;" id="active-chat-avatar">
                   <svg style="width: 20px; height: 20px;" viewBox="0 0 24 24" fill="currentColor">
                     <path
@@ -2074,11 +2087,11 @@
        MODALS: (All Fully Dynamic with Zero Emojis)
        ========================================================================= -->
 
-  <!-- 1. QR Code Scanner Modal -->
+  <!-- 1. WhatsApp Connection Modal (QR Code & Pairing Code) -->
   <div id="qr-scan-modal" class="modal-overlay">
-    <div class="modal-card" style="text-align: center;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h3 style="font-size: 19px; font-weight: 800; color: #171E1B;">مسح رمز الاستجابة السريعة (QR Code)</h3>
+    <div class="modal-card" style="text-align: center; max-width: 440px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 800; color: #171E1B;">ربط جهاز واتساب</h3>
         <button class="modal-close-btn" onclick="closeQrModal()"
           style="border: none; background: transparent; font-size: 20px; cursor: pointer;"><svg width="14" height="14"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -2086,63 +2099,122 @@
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg></button>
       </div>
-      <p id="qr-status-text" style="font-size: 13px; color: #64746F; margin-bottom: 16px;">جاري إعداد جلسة الاتصال وتوليد الرمز...</p>
-      
-      <!-- QR Image Container with Center Platform Logo -->
-      <div id="qr-code-wrapper"
-        style="background: #FFFFFF; padding: 14px; border-radius: 16px; border: 2px dashed #22C55E; display: inline-block; margin-bottom: 14px; position: relative;">
-        <div style="position: relative; width: 250px; height: 250px; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-          <img id="qr-code-img" src=""
-            style="width: 250px; height: 250px; display: none; object-fit: contain; margin: 0 auto;">
 
-          <!-- Centered Platform Logo Icon -->
-          <div id="qr-center-logo"
-            style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 52px; height: 52px; background: #FFFFFF; border-radius: 12px; padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); border: 2.5px solid #FFFFFF; z-index: 5; pointer-events: none; align-items: center; justify-content: center;">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="42" height="42" style="border-radius: 8px;">
-              <defs>
-                <linearGradient id="woxGradIconQr" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#25D366" />
-                  <stop offset="100%" stop-color="#128C7E" />
-                </linearGradient>
-              </defs>
-              <rect width="44" height="44" rx="9" fill="url(#woxGradIconQr)" />
-              <path d="M27.5 16.5a6.5 6.5 0 0 1-.7 3 6.6 6.6 0 0 1-5.9 3.6 6.5 6.5 0 0 1-3-.7l-4.4 1.1 1.2-4.2a6.5 6.5 0 0 1-.7-3 6.6 6.6 0 0 1 3.6-5.9 6.5 6.5 0 0 1 3-.7h.4a6.6 6.6 0 0 1 6.5 6.8z" fill="#FFFFFF" />
-            </svg>
+      <!-- Tab Switcher: QR Code vs Phone Pairing Code -->
+      <div style="display: flex; background: #F3F4F6; padding: 4px; border-radius: 10px; margin-bottom: 18px; gap: 4px;">
+        <button type="button" id="tab-btn-qr" onclick="switchQrConnectTab('qr')"
+          style="flex: 1; padding: 8px 12px; font-size: 12.5px; font-weight: 800; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; background: #FFFFFF; color: #171E1B; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+          <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>مسح QR Code</span>
+        </button>
+        <button type="button" id="tab-btn-pairing" onclick="switchQrConnectTab('pairing')"
+          style="flex: 1; padding: 8px 12px; font-size: 12.5px; font-weight: 700; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; background: transparent; color: #64746F; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+          <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          <span>الربط برقم الهاتف (كود)</span>
+        </button>
+      </div>
+
+      <!-- TAB 1: QR Code Section -->
+      <div id="connect-section-qr">
+        <p id="qr-status-text" style="font-size: 13px; color: #64746F; margin-bottom: 14px;">جاري إعداد جلسة الاتصال وتوليد الرمز...</p>
+
+        <!-- QR Image Container with Center Platform Logo -->
+        <div id="qr-code-wrapper"
+          style="background: #FFFFFF; padding: 14px; border-radius: 16px; border: 2px dashed #22C55E; display: inline-block; margin-bottom: 14px; position: relative;">
+          <div style="position: relative; width: 250px; height: 250px; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+            <img id="qr-code-img" src=""
+              style="width: 250px; height: 250px; display: none; object-fit: contain; margin: 0 auto;">
+
+            <!-- Centered Platform Logo Icon -->
+            <div id="qr-center-logo"
+              style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 52px; height: 52px; background: #FFFFFF; border-radius: 12px; padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); border: 2.5px solid #FFFFFF; z-index: 5; pointer-events: none; align-items: center; justify-content: center;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="42" height="42" style="border-radius: 8px;">
+                <defs>
+                  <linearGradient id="woxGradIconQr" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#25D366" />
+                    <stop offset="100%" stop-color="#128C7E" />
+                  </linearGradient>
+                </defs>
+                <rect width="44" height="44" rx="9" fill="url(#woxGradIconQr)" />
+                <path d="M27.5 16.5a6.5 6.5 0 0 1-.7 3 6.6 6.6 0 0 1-5.9 3.6 6.5 6.5 0 0 1-3-.7l-4.4 1.1 1.2-4.2a6.5 6.5 0 0 1-.7-3 6.6 6.6 0 0 1 3.6-5.9 6.5 6.5 0 0 1 3-.7h.4a6.6 6.6 0 0 1 6.5 6.8z" fill="#FFFFFF" />
+              </svg>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Live Countdown Timer & Progress Bar -->
-      <div id="qr-timer-container" style="display: none; margin-bottom: 14px; max-width: 280px; margin-left: auto; margin-right: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64746F; margin-bottom: 6px; font-weight: 600;">
-          <span style="display: inline-flex; align-items: center; gap: 5px;">
-            <svg style="width: 14px; height: 14px; color: #22C55E;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-            <span>تحديث الرمز تلقائياً خلال:</span>
-          </span>
-          <span id="qr-timer-countdown" style="font-weight: 800; color: #171E1B; font-variant-numeric: tabular-nums;">20 ثانية</span>
+        <!-- Live Countdown Timer (30s) & Progress Bar -->
+        <div id="qr-timer-container" style="display: none; margin-bottom: 14px; max-width: 280px; margin-left: auto; margin-right: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64746F; margin-bottom: 6px; font-weight: 600;">
+            <span style="display: inline-flex; align-items: center; gap: 5px;">
+              <svg style="width: 14px; height: 14px; color: #22C55E;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>تحديث الرمز تلقائياً خلال:</span>
+            </span>
+            <span id="qr-timer-countdown" style="font-weight: 800; color: #171E1B; font-variant-numeric: tabular-nums;">30 ثانية</span>
+          </div>
+          <div style="background: #E5E7EB; height: 6px; border-radius: 99px; overflow: hidden; width: 100%;">
+            <div id="qr-timer-progress" style="background: linear-gradient(90deg, #10B981, #22C55E); height: 100%; width: 100%; transition: width 1s linear; border-radius: 99px;"></div>
+          </div>
         </div>
-        <div style="background: #E5E7EB; height: 6px; border-radius: 99px; overflow: hidden; width: 100%;">
-          <div id="qr-timer-progress" style="background: linear-gradient(90deg, #10B981, #22C55E); height: 100%; width: 100%; transition: width 1s linear; border-radius: 99px;"></div>
+
+        <div style="font-size: 12.5px; color: #64746F; line-height: 1.6; margin-bottom: 12px;">
+          1. افتح تطبيق واتساب على هاتفك.<br>
+          2. اضغط على <strong>الأجهزة المرتبطة (Linked Devices)</strong>.<br>
+          3. وجه كاميرا الهاتف نحو الشاشة لمسح الرمز ضوئياً.
+        </div>
+
+        <button class="btn-secondary-action"
+          style="margin: 0 auto; font-size: 12px; padding: 7px 16px; display: inline-flex; align-items: center; gap: 6px;"
+          onclick="refreshCurrentQr()">
+          <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+          </svg>
+          <span>تحديث رمز الـ QR</span>
+        </button>
+      </div>
+
+      <!-- TAB 2: Pairing Code Section -->
+      <div id="connect-section-pairing" style="display: none; text-align: right;">
+        <p style="font-size: 13px; color: #64746F; line-height: 1.6; margin-bottom: 14px; text-align: center;">
+          الربط بدون كاميرا: أدخل رقم الهاتف المسجل عليه واتساب لاستلام كود التحقق.
+        </p>
+
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 12.5px; font-weight: 700; color: #171E1B; margin-bottom: 6px;">رقم هاتف الواتساب (بالصيغة الدولية):</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="pairing-phone-input" dir="ltr" class="phone-raw-input"
+              placeholder="مثال: 966512345678 أو 201012345678"
+              style="flex: 1; border: 1.5px solid #E5E7EB; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 700; background: #FAF9F5; letter-spacing: 0.5px;">
+            <button type="button" id="btn-generate-pairing-code" class="btn-primary-action" onclick="requestPairingCodeAction()"
+              style="padding: 9px 16px; font-size: 12.5px; font-weight: 800; border-radius: 10px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;">
+              <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>طلب الكود</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Pairing Code Result Box -->
+        <div id="pairing-code-result-box" style="display: none; background: #F0FDF4; border: 2px dashed #22C55E; border-radius: 14px; padding: 18px; text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 12px; color: #166534; font-weight: 700; margin-bottom: 6px;">كود الربط الخاص بك:</div>
+          <div id="pairing-code-display" style="font-size: 32px; font-weight: 900; letter-spacing: 4px; color: #15803D; font-family: monospace; direction: ltr; margin-bottom: 12px;">ABCD-1234</div>
+          <button type="button" onclick="copyPairingCode()" class="btn-secondary-action"
+            style="font-size: 12px; padding: 6px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; margin: 0 auto;">
+            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span id="copy-pairing-code-text">نسخ الكود</span>
+          </button>
+        </div>
+
+        <!-- Pairing Code Instructions -->
+        <div style="font-size: 12px; color: #64746F; line-height: 1.7; background: #FAF9F5; border-radius: 10px; padding: 12px 14px; border: 1px solid #EAE7DC;">
+          <strong>خطوات إدخال الكود في هاتفك:</strong><br>
+          1. افتح تطبيق واتساب على هاتفك.<br>
+          2. اذهب إلى <strong>الأجهزة المرتبطة (Linked Devices)</strong> > <strong>ربط جهاز</strong>.<br>
+          3. اضغط في أسفل الشاشة على <strong>"الربط برقم الهاتف بدلاً من ذلك"</strong>.<br>
+          4. اكتب الكود الموضح أعلاه لإتمام الربط فوراً.
         </div>
       </div>
-
-      <div style="font-size: 12.5px; color: #64746F; line-height: 1.6; margin-bottom: 12px;">
-        1. افتح تطبيق واتساب على هاتفك.<br>
-        2. اضغط على <strong>الأجهزة المرتبطة (Linked Devices)</strong>.<br>
-        3. وجه كاميرا الهاتف نحو الشاشة لمسح الرمز ضوئياً.
-      </div>
-
-      <button class="btn-secondary-action"
-        style="margin: 0 auto; font-size: 12px; padding: 7px 16px; display: inline-flex; align-items: center; gap: 6px;"
-        onclick="refreshCurrentQr()">
-        <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-        </svg>
-        <span>تحديث رمز الـ QR</span>
-      </button>
     </div>
   </div>
 
@@ -2471,9 +2543,36 @@
     </div>
   </div>
 
+  <!-- Mobile Drawer Backdrop Overlay -->
+  <div id="sidebar-drawer-backdrop" class="sidebar-drawer-backdrop" onclick="closeMobileSidebar()"></div>
+
+  <!-- Mobile Bottom Navigation Bar (First-Mobile Experience) -->
+  <nav class="mobile-bottom-nav">
+    <button type="button" class="mob-nav-btn active" id="mob-nav-dashboard" onclick="switchView('dashboard')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      <span>الرئيسية</span>
+    </button>
+    <button type="button" class="mob-nav-btn" id="mob-nav-instances" onclick="switchView('instances')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+      <span>الأرقام</span>
+    </button>
+    <button type="button" class="mob-nav-btn" id="mob-nav-messages" onclick="switchView('messages')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+      <span>المحادثات</span>
+    </button>
+    <button type="button" class="mob-nav-btn" id="mob-nav-contacts" onclick="switchView('contacts')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      <span>الجهات</span>
+    </button>
+    <button type="button" class="mob-nav-btn" id="mob-nav-settings" onclick="switchView('settings')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <span>الإعدادات</span>
+    </button>
+  </nav>
+
   <!-- JavaScript Controller (Cache Buster) -->
   <script src="/js/wox-branding.js"></script>
-  <script src="/js/wox-saas.js?v=3.1"></script>
+  <script src="/js/wox-saas.js?v=3.3"></script>
 </body>
 
 </html>

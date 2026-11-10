@@ -26,6 +26,22 @@ class InstanceService
     {
         $instanceName = $data['instanceName'];
 
+        // Multi-tenant quota check: if user_id is provided, enforce plan instance limits
+        $userId = $data['user_id'] ?? null;
+        if ($userId) {
+            $user = \App\Models\User::find($userId);
+            if ($user && !$user->isSuperAdmin()) {
+                if ($user->isSuspended()) {
+                    abort(403, 'حسابك موقوف حالياً من قبل الإدارة. يرجى التواصل مع الدعم الفني.');
+                }
+                $currentCount = Instance::where('user_id', $userId)->count();
+                $maxAllowed   = $user->max_instances ?? 1;
+                if ($currentCount >= $maxAllowed) {
+                    abort(403, "لقد وصلت للحد الأقصى المسموح به لعدد أرقام الواتساب في باقتك الحالية ({$maxAllowed}). يرجى ترقية باقتك لإضافة خطوط جديدة.");
+                }
+            }
+        }
+
         // Check if already exists
         $existing = Instance::where('name', $instanceName)->first();
         if ($existing) {
@@ -38,13 +54,15 @@ class InstanceService
 
         $token = $data['token'] ?? (new Cuid2())->toString();
 
-        $instance = DB::transaction(function () use ($instanceName, $token, $data) {
+        $instance = DB::transaction(function () use ($instanceName, $token, $data, $userId) {
             $inst = Instance::create([
                 'name'             => $instanceName,
                 'connectionStatus' => InstanceConnectionStatus::Close,
                 'token'            => $token,
                 'integration'      => $data['integration'] ?? 'WHATSAPP-BAILEYS',
                 'number'           => $data['number'] ?? null,
+                'user_id'          => $userId,
+                'tenant_id'        => $data['tenant_id'] ?? ($userId ? "tenant_{$userId}" : null),
             ]);
 
             // Create default Setting
@@ -84,14 +102,20 @@ class InstanceService
     }
 
     /**
-     * Find all instances (global) or single instance.
+     * Find all instances (scoped to user/tenant or global for super admin) or single instance.
      */
-    public function findAll(?string $instanceName = null): array
+    public function findAll(?string $instanceName = null, ?int $userId = null, ?string $tenantId = null): array
     {
         $query = Instance::with(['setting', 'webhook']);
 
         if ($instanceName) {
             $query->where('name', $instanceName);
+        }
+
+        if ($userId) {
+            $query->where('user_id', $userId);
+        } elseif ($tenantId) {
+            $query->where('tenant_id', $tenantId);
         }
 
         return $query->get()->map(fn($inst) => $this->formatInstance($inst))->toArray();

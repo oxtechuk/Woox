@@ -19,7 +19,7 @@ class EvolutionService
     /**
      * Connect instance based on its configured integration.
      */
-    public function connect(Instance $instance): array
+    public function connect(Instance $instance, ?string $number = null): array
     {
         if ($instance->integration === 'WHATSAPP-BUSINESS') {
             return [
@@ -32,7 +32,7 @@ class EvolutionService
             ];
         }
 
-        return $this->baileysService->connect($instance);
+        return $this->baileysService->connect($instance, $number);
     }
 
     /**

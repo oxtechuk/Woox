@@ -19,6 +19,8 @@ class CreateInstanceRequest extends FormRequest
     {
         return [
             'instanceName'    => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9_\-\.]+$/'],
+            'user_id'         => ['nullable'],
+            'tenant_id'       => ['nullable', 'string', 'max:64'],
             'token'           => ['nullable', 'string', 'max:255'],
             'number'          => ['nullable', 'string', 'max:100'],
             'businessId'      => ['nullable', 'string', 'max:100'],

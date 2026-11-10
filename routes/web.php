@@ -34,23 +34,21 @@ Route::get('/wizard', fn () => $serveHtml('wizard.html'));
 Route::get('/dashboard', fn () => $serveHtml('index.html'));
 Route::get('/dashboard/{any}', fn () => $serveHtml('index.html'))->where('any', '.*');
 
-// Super Admin Routes
-Route::get('/admin', fn () => $serveHtml('admin.html'));
-Route::get('/admin/{any}', fn () => $serveHtml('admin.html'))->where('any', '.*');
+// Super Admin Routes (Guarded by RequireSuperAdmin: Hidden from scanners with 404)
+Route::middleware([\App\Http\Middleware\RequireSuperAdmin::class])->group(function () use ($serveHtml) {
+    Route::get('/admin', fn () => $serveHtml('admin.html'));
+    Route::get('/admin/{any}', fn () => $serveHtml('admin.html'))->where('any', '.*');
+});
 
 // ─── SaaS Platform API Endpoints ──────────────────────────────
 Route::prefix('saas')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->group(function () {
     // Analytics
     Route::get('analytics/config',         [\App\Http\Controllers\SaasController::class, 'getAnalyticsConfig']);
     Route::post('analytics/config',        [\App\Http\Controllers\SaasController::class, 'saveAnalyticsConfig']);
-    Route::get('admin/analytics-config',   [\App\Http\Controllers\SaasController::class, 'getAnalyticsConfig']);
-    Route::post('admin/analytics-config',  [\App\Http\Controllers\SaasController::class, 'saveAnalyticsConfig']);
 
     // Site & SEO Settings
     Route::get('site-settings',            [\App\Http\Controllers\SaasController::class, 'getSiteSettings']);
     Route::post('site-settings',           [\App\Http\Controllers\SaasController::class, 'saveSiteSettings']);
-    Route::get('admin/site-settings',      [\App\Http\Controllers\SaasController::class, 'getSiteSettings']);
-    Route::post('admin/site-settings',     [\App\Http\Controllers\SaasController::class, 'saveSiteSettings']);
 
     // Media & Image Uploads
     Route::post('upload-media',            [\App\Http\Controllers\SaasController::class, 'uploadMedia']);
@@ -88,11 +86,23 @@ Route::prefix('saas')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware
     Route::post('campaigns/{tenantId}/{id}/pause',         [\App\Http\Controllers\SaasController::class, 'pauseCampaign']);
     Route::post('campaigns/{tenantId}/{id}/resume',        [\App\Http\Controllers\SaasController::class, 'resumeCampaign']);
 
-    // Super Admin
-    Route::get('admin/overview',                           [\App\Http\Controllers\SaasController::class, 'adminOverview']);
-    Route::get('admin/tenants',                            [\App\Http\Controllers\SaasController::class, 'adminTenants']);
-    Route::get('admin/numbers',                            [\App\Http\Controllers\SaasController::class, 'adminNumbers']);
-    Route::get('admin/invoices',                           [\App\Http\Controllers\SaasController::class, 'adminInvoices']);
+    // Super Admin Endpoints (Strictly Guarded)
+    Route::middleware([\App\Http\Middleware\RequireSuperAdmin::class])->prefix('admin')->group(function () {
+        Route::get('overview',                             [\App\Http\Controllers\SaasController::class, 'adminOverview']);
+        Route::get('tenants',                              [\App\Http\Controllers\SaasController::class, 'adminTenants']);
+        Route::post('tenants/{id}/status',                 [\App\Http\Controllers\SaasController::class, 'adminUpdateTenantStatus']);
+        Route::post('tenants/{id}/upgrade',                [\App\Http\Controllers\SaasController::class, 'adminUpgradeTenant']);
+        Route::delete('tenants/{id}',                      [\App\Http\Controllers\SaasController::class, 'adminDeleteTenant']);
+        Route::post('broadcast',                           [\App\Http\Controllers\SaasController::class, 'adminBroadcast']);
+        Route::post('plans/update',                        [\App\Http\Controllers\SaasController::class, 'adminUpdatePlan']);
+        Route::post('plans/create',                        [\App\Http\Controllers\SaasController::class, 'adminCreatePlan']);
+        Route::get('numbers',                              [\App\Http\Controllers\SaasController::class, 'adminNumbers']);
+        Route::get('invoices',                             [\App\Http\Controllers\SaasController::class, 'adminInvoices']);
+        Route::get('analytics-config',                     [\App\Http\Controllers\SaasController::class, 'getAnalyticsConfig']);
+        Route::post('analytics-config',                    [\App\Http\Controllers\SaasController::class, 'saveAnalyticsConfig']);
+        Route::get('site-settings',                        [\App\Http\Controllers\SaasController::class, 'getSiteSettings']);
+        Route::post('site-settings',                       [\App\Http\Controllers\SaasController::class, 'saveSiteSettings']);
+    });
 });
 
 // ─── Evolution API Direct Root Routes (for Wox Frontend) ──────

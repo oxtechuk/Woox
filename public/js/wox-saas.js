@@ -9,6 +9,23 @@ window.API_BASE = API_BASE;
 var MASTER_API_KEY = window.MASTER_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 window.MASTER_API_KEY = MASTER_API_KEY;
 var currentApiKey = MASTER_API_KEY;
+
+function getAuthHeaders(extra = {}) {
+  let user = {};
+  let tenant = {};
+  try {
+    user = JSON.parse(localStorage.getItem('wox_user') || '{}');
+    tenant = JSON.parse(localStorage.getItem('wox_tenant') || '{}');
+  } catch (e) {}
+
+  const headers = {
+    'apikey': MASTER_API_KEY,
+    ...extra
+  };
+  if (user && user.id) headers['X-User-Id'] = String(user.id);
+  if (tenant && tenant.id) headers['X-Tenant-Id'] = String(tenant.id);
+  return headers;
+}
 let currentActiveView = 'dashboard';
 let activeDevLanguage = 'curl';
 let currentInstIdx = 0;
@@ -180,10 +197,121 @@ if (document.readyState === 'loading') {
 }
 
 // =============================================================================
-// 1. SPA View Router & Navigation
+// 1. SPA View Router, Mobile Navigation & Plan Feature Access Gating
 // =============================================================================
+function toggleMobileSidebar() {
+  const sidebar = document.querySelector('.wox-sidebar');
+  const backdrop = document.getElementById('sidebar-drawer-backdrop');
+  if (!sidebar) return;
+  sidebar.classList.toggle('drawer-open');
+  if (backdrop) backdrop.classList.toggle('active', sidebar.classList.contains('drawer-open'));
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.querySelector('.wox-sidebar');
+  const backdrop = document.getElementById('sidebar-drawer-backdrop');
+  if (sidebar) sidebar.classList.remove('drawer-open');
+  if (backdrop) backdrop.classList.remove('active');
+}
+
+function closeMobileChat() {
+  const convPanel = document.querySelector('.chat-conversations-panel');
+  const threadPanel = document.querySelector('.chat-thread-panel');
+  if (convPanel) convPanel.classList.remove('hide-on-mobile');
+  if (threadPanel) threadPanel.classList.remove('active-on-mobile');
+  activeChatConvId = null;
+}
+
+function updateMobileNav(viewId) {
+  closeMobileSidebar();
+  document.querySelectorAll('.mob-nav-btn').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = document.getElementById(`mob-nav-${viewId}`);
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
+function getCurrentUserPlan() {
+  try {
+    const user = JSON.parse(localStorage.getItem('wox_user') || '{}');
+    const tenant = JSON.parse(localStorage.getItem('wox_tenant') || '{}');
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return 'enterprise';
+    return (user.plan || (tenant.subscription && tenant.subscription.plan && tenant.subscription.plan.id) || 'starter').toLowerCase();
+  } catch (e) {
+    return 'starter';
+  }
+}
+
+const PLAN_ACCESS_MATRIX = {
+  starter: ['dashboard', 'instances', 'messages', 'templates', 'contacts', 'settings'],
+  pro: ['dashboard', 'instances', 'messages', 'templates', 'contacts', 'campaigns', 'automation', 'webhooks', 'settings'],
+  enterprise: ['dashboard', 'instances', 'messages', 'templates', 'contacts', 'campaigns', 'automation', 'webhooks', 'logs', 'developers', 'settings']
+};
+
+function checkFeaturePlanAccess(viewId) {
+  const currentPlan = getCurrentUserPlan();
+  const allowedViews = PLAN_ACCESS_MATRIX[currentPlan] || PLAN_ACCESS_MATRIX.starter;
+  if (allowedViews.includes(viewId)) {
+    return { allowed: true };
+  }
+
+  const toolNames = {
+    webhooks: 'الربط والويب هوك السحابي (Webhooks & API Integration)',
+    automation: 'الأتمتة الذكية والرد الآلي (AI Automation & Chatbots)',
+    campaigns: 'حملات واتساب التسويقية (WhatsApp Bulk Campaigns)',
+    logs: 'سجلات النشاط وأمان النظام (Audit & Activity Logs)',
+    developers: 'واجهة المبرمجين وتكامل المفاتيح (Developer API)',
+  };
+
+  const requiredPlan = (viewId === 'logs' || viewId === 'developers') ? 'باقة الشركات (Enterprise)' : 'الباقة المتقدمة (Pro)';
+  return {
+    allowed: false,
+    toolName: toolNames[viewId] || viewId,
+    requiredPlan: requiredPlan
+  };
+}
+
+function showPlanLockedModal(toolName, requiredPlan) {
+  let modal = document.getElementById('plan-locked-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'plan-locked-modal';
+    modal.className = 'wox-modal-overlay';
+    modal.innerHTML = `
+      <div class="wox-modal-card" style="max-width: 460px; text-align: center; padding: 28px 24px;">
+        <div style="width: 56px; height: 56px; background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+        <h3 id="locked-tool-title" style="font-size: 18px; font-weight: 800; color: #1C1613; margin-bottom: 8px;">ميزة حصرية مقفلة</h3>
+        <p id="locked-tool-desc" style="font-size: 13.5px; color: #6B7280; line-height: 1.6; margin-bottom: 22px;"></p>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+          <button type="button" class="btn-primary btn-gold" style="padding: 10px 22px; font-size: 13px;" onclick="closeModal('plan-locked-modal'); switchView('settings');">
+            <span>ترقية باقتي الآن ↑</span>
+          </button>
+          <button type="button" class="btn-secondary" style="padding: 10px 18px; font-size: 13px;" onclick="closeModal('plan-locked-modal')">
+            <span>إغلاق</span>
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  const descEl = document.getElementById('locked-tool-desc');
+  if (descEl) {
+    descEl.textContent = `أداة (${toolName}) غير متاحة في باقتك الحالية. تتطلب هذه الميزة الترقية إلى ${requiredPlan} للاستفادة الكاملة من إمكانياتها وربطها بمتجرك.`;
+  }
+  modal.classList.add('active');
+}
+
 function switchView(viewId, updateHistory = true) {
+  // Feature Access Check based on Subscription Plan
+  const access = checkFeaturePlanAccess(viewId);
+  if (!access.allowed) {
+    showPlanLockedModal(access.toolName, access.requiredPlan);
+    return;
+  }
+
   currentActiveView = viewId;
+  updateMobileNav(viewId);
 
   // Update browser URL if navigating
   if (updateHistory && window.history && window.history.pushState) {
@@ -203,6 +331,8 @@ function switchView(viewId, updateHistory = true) {
   const targetView = document.getElementById(`view-${viewId}`);
   if (targetView) {
     targetView.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -230,8 +360,6 @@ function switchView(viewId, updateHistory = true) {
   } else if (viewId === 'webhooks') {
     loadWebhookConfiguration();
   }
-
-  showToast(`تم فتح شاشة: ${getArabicViewTitle(viewId)}`);
 }
 
 function getArabicViewTitle(id) {
@@ -557,8 +685,6 @@ function setChatTypeFilter(type, btn) {
     if (el) el.classList.add('active');
   }
   renderChatView();
-  const label = type === 'group' ? 'المجموعات' : type === 'channel' ? 'القنوات' : type === 'direct' ? 'المحادثات الفردية' : 'جميع المحادثات';
-  showToast(`عرض: ${label}`);
 }
 
 // Update Chat Type Badges Count
@@ -770,11 +896,16 @@ function renderChatView() {
 function filterChatsByTag(tag, btn) {
   activeChatFilterTag = tag;
   renderChatView();
-  showToast(tag === 'all' ? 'عرض جميع الوسوم' : `تصفية حسب: [${tag}]`);
 }
 
 async function selectChatConversation(id) {
   activeChatConvId = id;
+  const convPanel = document.querySelector('.chat-conversations-panel');
+  const threadPanel = document.querySelector('.chat-thread-panel');
+  if (window.innerWidth <= 768) {
+    if (convPanel) convPanel.classList.add('hide-on-mobile');
+    if (threadPanel) threadPanel.classList.add('active-on-mobile');
+  }
   renderChatView();
   const activeInst = getActiveInstance();
   if (activeInst) {
@@ -1139,7 +1270,7 @@ function showNewChatPrompt() {
 async function fetchInstancesStats() {
   try {
     const res = await fetch(`${API_BASE}/instance/fetchInstances`, {
-      headers: { apikey: MASTER_API_KEY }
+      headers: getAuthHeaders()
     });
     const data = await res.json();
     if (Array.isArray(data)) {
@@ -1394,7 +1525,132 @@ async function handleCreateInstanceSubmit(event) {
 }
 
 var qrCountdownInterval = null;
-var QR_EXPIRY_SECONDS = 20;
+var QR_EXPIRY_SECONDS = 30;
+
+function switchQrConnectTab(tab) {
+  var qrSec = document.getElementById('connect-section-qr');
+  var pairSec = document.getElementById('connect-section-pairing');
+  var btnQr = document.getElementById('tab-btn-qr');
+  var btnPair = document.getElementById('tab-btn-pairing');
+
+  if (tab === 'pairing') {
+    if (qrSec) qrSec.style.display = 'none';
+    if (pairSec) pairSec.style.display = 'block';
+
+    if (btnPair) {
+      btnPair.style.background = '#FFFFFF';
+      btnPair.style.color = '#171E1B';
+      btnPair.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+      btnPair.style.fontWeight = '800';
+    }
+    if (btnQr) {
+      btnQr.style.background = 'transparent';
+      btnQr.style.color = '#64746F';
+      btnQr.style.boxShadow = 'none';
+      btnQr.style.fontWeight = '700';
+    }
+    stopQrTimer();
+  } else {
+    if (qrSec) qrSec.style.display = 'block';
+    if (pairSec) pairSec.style.display = 'none';
+
+    if (btnQr) {
+      btnQr.style.background = '#FFFFFF';
+      btnQr.style.color = '#171E1B';
+      btnQr.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+      btnQr.style.fontWeight = '800';
+    }
+    if (btnPair) {
+      btnPair.style.background = 'transparent';
+      btnPair.style.color = '#64746F';
+      btnPair.style.boxShadow = 'none';
+      btnPair.style.fontWeight = '700';
+    }
+    var qrImg = document.getElementById('qr-code-img');
+    if (qrImg && qrImg.style.display !== 'none' && qrImg.src) {
+      startQrTimer();
+    }
+  }
+}
+
+async function requestPairingCodeAction() {
+  if (!currentQrInstanceId) return;
+  var phoneInput = document.getElementById('pairing-phone-input');
+  var rawPhone = phoneInput ? phoneInput.value.trim() : '';
+  var cleanPhone = rawPhone.replace(/\D/g, '');
+
+  if (!cleanPhone || cleanPhone.length < 8) {
+    showToast('يرجى إدخال رقم هاتف صحيح مع كود الدولة (مثال: 966512345678)');
+    if (phoneInput) phoneInput.focus();
+    return;
+  }
+
+  var btn = document.getElementById('btn-generate-pairing-code');
+  var origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>جاري التوليد...</span>';
+  }
+
+  try {
+    var res = await fetch(`${API_BASE}/instance/connect/${currentQrInstanceId}?number=${cleanPhone}`, {
+      headers: { 'apikey': MASTER_API_KEY }
+    });
+
+    if (res.ok) {
+      var data = await res.json();
+      var code = data.pairingCode || data.code;
+      if (code) {
+        var resultBox = document.getElementById('pairing-code-result-box');
+        var codeDisplay = document.getElementById('pairing-code-display');
+        if (codeDisplay) codeDisplay.textContent = code;
+        if (resultBox) resultBox.style.display = 'block';
+        showToast('تم استخراج كود الربط بنجاح! أدخله الآن في تطبيق الواتساب.');
+      } else {
+        showToast('لم نتمكن من استخراج كود الربط، تأكد من تشغيل محرك الواتساب.');
+      }
+    } else {
+      showToast('تعذر استخراج كود الربط، تحقق من إعدادات الخادم.');
+    }
+  } catch (err) {
+    console.error('Pairing Code Request Error:', err);
+    showToast('حدث خطأ أثناء طلب كود الربط.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+function copyPairingCode() {
+  var codeEl = document.getElementById('pairing-code-display');
+  var textEl = document.getElementById('copy-pairing-code-text');
+  if (!codeEl) return;
+  var code = codeEl.textContent.trim();
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => {
+      if (textEl) {
+        textEl.textContent = 'تم النسخ! ✓';
+        setTimeout(() => { textEl.textContent = 'نسخ الكود'; }, 2000);
+      }
+      showToast('تم نسخ كود الربط إلى الحافظة');
+    });
+  } else {
+    var tempInput = document.createElement('input');
+    tempInput.value = code;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempInput);
+    if (textEl) {
+      textEl.textContent = 'تم النسخ! ✓';
+      setTimeout(() => { textEl.textContent = 'نسخ الكود'; }, 2000);
+    }
+    showToast('تم نسخ كود الربط إلى الحافظة');
+  }
+}
 
 function startQrTimer() {
   stopQrTimer();
@@ -1447,6 +1703,12 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
   if (timerContainer) timerContainer.style.display = 'none';
   if (centerLogo) centerLogo.style.display = 'none';
 
+  switchQrConnectTab('qr');
+  var pairingBox = document.getElementById('pairing-code-result-box');
+  if (pairingBox) pairingBox.style.display = 'none';
+  var pairingInput = document.getElementById('pairing-phone-input');
+  if (pairingInput) pairingInput.value = '';
+
   modal.classList.add('active');
   qrStatus.textContent = 'جاري الاتصال بخادم واتساب وتوليد رمز QR حقيقي...';
   qrImg.style.display = 'none';
@@ -1458,12 +1720,32 @@ async function showQrModalFor(id, displayName, desc = 'فرع تجاري جدي�
 
   try {
     try {
+      let user = {};
+      let tenant = {};
+      try {
+        user = JSON.parse(localStorage.getItem('wox_user') || '{}');
+        tenant = JSON.parse(localStorage.getItem('wox_tenant') || '{}');
+      } catch (e) {}
+
       const createRes = await fetch(`${API_BASE}/instance/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': MASTER_API_KEY },
-        body: JSON.stringify({ instanceName: id, integration: 'WHATSAPP-BAILEYS', qrcode: true })
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          instanceName: id,
+          integration: 'WHATSAPP-BAILEYS',
+          qrcode: true,
+          user_id: user.id || null,
+          tenant_id: tenant.id || null
+        })
       });
-      if (!createRes.ok && createRes.status !== 403 && createRes.status !== 409) {
+      if (createRes.status === 403) {
+        const errJson = await createRes.json().catch(() => ({}));
+        const msg = errJson.message || 'وصلت للحد الأقصى للأرقام المسموحة في باقتك الحالية.';
+        showToast(msg, 'error');
+        qrStatus.textContent = msg;
+        return;
+      }
+      if (!createRes.ok && createRes.status !== 409) {
         console.warn('Instance create notice:', createRes.status);
       }
     } catch (e) {
@@ -1573,6 +1855,8 @@ function closeQrModal() {
   var centerLogo = document.getElementById('qr-center-logo');
   if (timerContainer) timerContainer.style.display = 'none';
   if (centerLogo) centerLogo.style.display = 'none';
+  var pairingBox = document.getElementById('pairing-code-result-box');
+  if (pairingBox) pairingBox.style.display = 'none';
   closeModal('qr-scan-modal');
 }
 
@@ -2200,24 +2484,36 @@ function filterChatList(q) {
   });
 }
 
-// Toast
-function showToast(msg) {
+// Compact & Elegant Toast Notification (Bottom of Screen)
+function showToast(msg, type = 'info') {
   const container = document.getElementById('wox-toast-container');
   if (!container) return;
 
+  // Clear previous toast so it doesn't pile up
+  container.innerHTML = '';
+
   const toast = document.createElement('div');
-  toast.className = 'wox-toast';
+  const isError = type === 'error' || String(msg).includes('⚠️') || String(msg).includes('❌') || String(msg).includes('خطأ') || String(msg).includes('فشل');
+  toast.className = 'wox-toast' + (isError ? ' wox-toast-error' : '');
+
+  const iconSvg = isError
+    ? `<svg style="width: 14px; height: 14px; color: #EF4444; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`
+    : `<svg style="width: 14px; height: 14px; color: #22C55E; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+  const cleanMsg = String(msg).replace(/^[⚠️❌✅💾⏸️▶️🚀🗑️🎲\s]+/, '');
+
   toast.innerHTML = `
-    <svg style="width: 16px; height: 16px; color: #22C55E; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-    <span>${msg}</span>
+    ${iconSvg}
+    <span>${cleanMsg || msg}</span>
   `;
   container.appendChild(toast);
 
   setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transition = 'opacity 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 3200);
+    toast.style.transform = 'translateY(10px)';
+    toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    setTimeout(() => toast.remove(), 250);
+  }, 2300);
 }
 
 // Session Auth

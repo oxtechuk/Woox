@@ -24,18 +24,23 @@ class BaileysService
     }
 
     /**
-     * Connect instance and request QR code or start session.
+     * Connect instance and request QR code or start session with pairing code.
      */
-    public function connect(Instance $instance): array
+    public function connect(Instance $instance, ?string $number = null): array
     {
         $bridgeAvailable = Cache::get('baileys_bridge_available');
 
         if ($bridgeAvailable !== false) {
             try {
                 $timeout = (int) config('evolution.bridge.timeout', 15);
+                $query = [];
+                if ($number) {
+                    $query['number'] = preg_replace('/\D/', '', $number);
+                }
+
                 $response = Http::connectTimeout(4)->timeout($timeout)
                     ->withHeaders(['apikey' => $instance->token ?: config('evolution.authentication.api_key')])
-                    ->get("{$this->bridgeUrl}/instance/connect/{$instance->name}");
+                    ->get("{$this->bridgeUrl}/instance/connect/{$instance->name}", $query);
 
                 if ($response->successful()) {
                     Cache::put('baileys_bridge_available', true, 60);
@@ -45,8 +50,9 @@ class BaileysService
                             'instanceName' => $instance->name,
                             'status'       => $data['instance']['status'] ?? $instance->connectionStatus->value,
                         ],
-                        'qrcode'   => $data['qrcode'] ?? null,
-                        'pairingCode' => $data['pairingCode'] ?? null,
+                        'qrcode'      => $data['qrcode'] ?? null,
+                        'base64'      => $data['base64'] ?? ($data['qrcode']['base64'] ?? null),
+                        'pairingCode' => $data['pairingCode'] ?? ($data['code'] ?? null),
                     ];
                 }
             } catch (\Throwable $e) {
@@ -57,6 +63,7 @@ class BaileysService
 
         // Offline / Bridge fallback: generate clean SVG QR Code data URI for instant rendering
         $mockQr = $this->generateFallbackQrCode($instance->name);
+        $mockPairingCode = $number ? $this->generateFallbackPairingCode($number) : null;
 
         return [
             'instance' => [
@@ -67,9 +74,24 @@ class BaileysService
                 'base64' => $mockQr,
                 'code'   => "2@wox_demo_{$instance->name}_session",
             ],
-            'base64'   => $mockQr,
-            'pairingCode' => null,
+            'base64'      => $mockQr,
+            'pairingCode' => $mockPairingCode,
         ];
+    }
+
+    /**
+     * Generates a realistic 8-character pairing code (e.g. ABCD-1234) for UI/fallback.
+     */
+    private function generateFallbackPairingCode(string $number): string
+    {
+        $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $part1 = '';
+        $part2 = '';
+        for ($i = 0; $i < 4; $i++) {
+            $part1 .= $chars[random_int(0, strlen($chars) - 1)];
+            $part2 .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+        return "{$part1}-{$part2}";
     }
 
     /**

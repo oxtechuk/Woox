@@ -126,6 +126,18 @@ class InstanceApiTest extends TestCase
             ->assertJsonStructure(['instance' => ['instanceName', 'state']]);
     }
 
+    public function test_can_request_pairing_code(): void
+    {
+        $instance = Instance::factory()->create();
+
+        $response = $this->withHeaders(['apikey' => $this->apiKey])
+            ->getJson("/api/instance/connect/{$instance->name}?number=966512345678");
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['instance', 'pairingCode']);
+        $this->assertNotNull($response->json('pairingCode'));
+    }
+
     public function test_connection_state_returns_404_for_unknown_instance(): void
     {
         $response = $this->withHeaders(['apikey' => $this->apiKey])

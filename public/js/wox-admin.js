@@ -7,6 +7,25 @@
 (function () {
   'use strict';
 
+  const originalFetch = window.fetch.bind(window);
+  function secureFetch(url, options = {}) {
+    let user = {};
+    let tokens = {};
+    try {
+      user = JSON.parse(localStorage.getItem('wox_user') || '{}');
+      tokens = JSON.parse(localStorage.getItem('wox_tokens') || '{}');
+    } catch (e) {}
+    options = options || {};
+    options.headers = Object.assign({
+      'apikey': '429683C4C977415CAAFCCE10F7D57E11',
+      'X-Admin-Key': '429683C4C977415CAAFCCE10F7D57E11',
+      'X-User-Id': user.id || '',
+      'Authorization': `Bearer ${tokens.accessToken || '429683C4C977415CAAFCCE10F7D57E11'}`,
+    }, options.headers || {});
+    return originalFetch(url, options);
+  }
+  const fetch = secureFetch;
+
   let allTenants = [];
   let allPlans = [];
   let allNumbers = [];
@@ -285,6 +304,9 @@
               <button class="action-btn action-btn-gold" onclick="window.adminApp.openUpgradeModal('${t.id}', '${escapeHtml(t.name)}')">
                 ترقية
               </button>
+              <button class="action-btn" style="background:#EF4444; color:#fff;" onclick="window.adminApp.deleteTenant('${t.id}', '${escapeHtml(t.name)}')">
+                حذف
+              </button>
               <button class="action-btn action-btn-dark" onclick="window.adminApp.loginAsTenant('${t.id}')">
                 دخول
               </button>
@@ -494,6 +516,26 @@
           loadOverview();
         } else {
           alert(json.message || 'فشل تحديث الحالة');
+        }
+      } catch (e) {
+        console.error(e);
+        alert('حدث خطأ أثناء الاتصال بالسيرفر');
+      }
+    },
+
+    deleteTenant: async function (tenantId, tenantName) {
+      if (!confirm(`تحذير نهائي: هل أنت متأكد من رغبتك في حذف حساب المشترك "${tenantName}" وجميع أرقام الواتساب المرتبطة به نهائياً؟ هذا الإجراء لا يمكن التراجع عنه!`)) return;
+      try {
+        const res = await fetch(`/saas/admin/tenants/${tenantId}`, {
+          method: 'DELETE',
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+          showToast('تم حذف حساب المشترك بنجاح');
+          loadTenants();
+          loadOverview();
+        } else {
+          alert(json.message || 'فشل حذف المشترك');
         }
       } catch (e) {
         console.error(e);

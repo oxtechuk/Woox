@@ -33,13 +33,14 @@ class Instance extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'id', 'name', 'connectionStatus', 'ownerJid', 'profileName',
+        'id', 'user_id', 'tenant_id', 'name', 'connectionStatus', 'ownerJid', 'profileName',
         'profilePicUrl', 'integration', 'number', 'businessId',
         'token', 'clientName', 'disconnectionReasonCode',
         'disconnectionObject', 'disconnectionAt', 'createdAt', 'updatedAt',
     ];
 
     protected $casts = [
+        'user_id'            => 'integer',
         'connectionStatus'   => InstanceConnectionStatus::class,
         'disconnectionObject' => 'array',
         'disconnectionAt'    => 'datetime',
@@ -48,6 +49,11 @@ class Instance extends Model
     ];
 
     // ─── Relations ───────────────────────────────────────────────
+
+    public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 
     public function chats(): HasMany
     {
